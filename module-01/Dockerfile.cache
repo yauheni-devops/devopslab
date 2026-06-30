@@ -1,0 +1,14 @@
+# syntax=docker/dockerfile:1
+FROM python:3.11-slim-bullseye
+
+WORKDIR /app
+
+# Кэширование pip пакетов
+COPY requirements.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip && \
+    pip install -r requirements.txt
+
+COPY . .
+
+CMD ["python", "app.py"]

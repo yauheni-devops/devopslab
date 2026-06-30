@@ -1,0 +1,13 @@
+FROM --platform=$BUILDPLATFORM python:3.11-slim-bullseye AS builder
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+
+FROM --platform=$TARGETPLATFORM python:3.11-slim-bullseye
+
+WORKDIR /app
+COPY --from=builder /app /app
+
+CMD ["python", "app.py"]

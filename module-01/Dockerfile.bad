@@ -1,0 +1,20 @@
+# Плохой Dockerfile с множеством проблем
+FROM ubuntu:20.04
+
+# Проблема 1: RUN без очистки кэша
+RUN apt-get update
+RUN apt-get install -y python3 python3-pip
+RUN apt-get install -y curl wget
+
+# Проблема 2: Копирование с неправильным порядком (кэш не используется)
+COPY . /app
+
+# Проблема 3: Установка пакетов без указания версий
+RUN pip3 install flask requests numpy
+
+# Проблема 4: Запуск от root
+CMD ["python3", "/app/app.py"]
+
+# Проблема 5: Нет WORKDIR
+# Проблема 6: Нет .dockerignore
+# Проблема 7: Не указаны версии пакетов
