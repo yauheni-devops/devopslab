@@ -1,0 +1,437 @@
+Space: Advanced DevOps (PRO Track)
+Цель: Подготовить специалиста, способного развертывать, мониторить и обслуживать сложные, высокодоступные микросервисные системы, используя Kubernetes, CI/CD-пайплайны и практики GitOps/Service Mesh.
+________________________________________
+●	Модуль 1: "Закалка" Docker (Security & Optimization)
+Цель модуля: Перейти от "просто работает" Dockerfile к "безопасному и быстрому" Dockerfile.
+1.	Задача (Теория): Анализ Dockerfile (Linting).
+■	Контекст: hadolint — это "linter" для Dockerfile.
+■	Задание: Установить hadolint. Написать "плохой" Dockerfile (e.g., RUN apt update и RUN apt install отдельно) и проанализировать его.
+■	Критерии: hadolint показывает ошибки и рекомендации.
+2.	Задача (Оптимизация): Слияние RUN слоев.
+■	Задание: Исправить Dockerfile из Задачи 1, объединив RUN через && для уменьшения количества слоев.
+■	Критерии: hadolint больше не ругается; docker history показывает меньше слоев.
+3.	Задача (Безопасность): Сканирование уязвимостей (Vulnerability Scanning).
+■	Задание: Установить Trivy (от Aqua Security). Собрать образ на старом python:3.8-slim-buster. Просканировать его: trivy image my-app:1.0.
+■	Критерии: Trivy показывает список CVE (уязвимостей).
+4.	Задача (Исправление): Пересобрать образ на python:3.11-slim-bullseye (более новой).
+■	Критерии: trivy image my-app:2.0 показывает 0 HIGH/CRITICAL уязвимостей.
+5.	Задача (Теория): BuildKit.
+■	Контекст: BuildKit — это новый, параллельный и более быстрый сборщик Docker.
+■	Задание: Включить BuildKit (DOCKER_BUILDKIT=1). Пересобрать образ.
+■	Критерии: Вывод docker build изменился (стал "древовидным").
+6.	Задача (BuildKit Cache): Использование RUN --mount=type=cache.
+■	Контекст: Как кешировать apt или pip между сборками?
+■	Задание: Изменить RUN pip install ... на RUN --mount=type=cache,target=/root/.cache/pip pip install ....
+■	Критерии: Повторная сборка (даже после docker builder prune) использует кеш pip, что ускоряет сборку.
+7.	Задача (Multi-arch build): Сборка под ARM64 (Apple M1/M2) и AMD64 (Intel/AMD).
+■	Задание: Установить qemu и buildx (docker buildx create ...). Собрать образ: docker buildx build --platform linux/amd64,linux/arm64 ... --push.
+■	Критерии: В Docker Hub образ my-app:latest имеет 2 архитектуры.
+8.	Задача (Build Secrets): Безопасная передача токенов во время сборки.
+■	Контекст: Как использовать приватный pip репозиторий?
+■	Задание: Изучить RUN --mount=type=secret,id=mysecret ....
+■	Критерии: Секрет (e.g., pip.conf) используется при сборке, но не сохраняется в слоях образа.
+9.	Задача (Slim-образы): Использование distroless (Google).
+■	Задание: Написать multi-stage Dockerfile (e.g., для Go/Java), где final образ — gcr.io/distroless/static (не содержит ничего, кроме вашего бинарника).
+■	Критерии: Итоговый образ весит < 20 МБ (для Go). docker run ... bash не работает (т.к. bash в образе нет).
+10.	Задача (Docker Compose Override): Разделение dev и prod в Compose.
+■	Задание: Создать docker-compose.yml (для prod, использует image: my-app:latest) и docker-compose.override.yml (для dev, использует build: . и volumes: [.:/app]).
+■	Критерии: docker-compose up (запускает dev), docker-compose -f docker-compose.yml up (запускает prod).
+________________________________________
+●	Модуль 2: Jenkins 101 (CI/CD Локально)
+Цель модуля: Развернуть Jenkins локально в Docker и настроить первый Pipeline as Code (Jenkinsfile).
+1.	Задача (Развертывание): Запустить Jenkins (LTS) в Docker.
+■	Задание: docker run -d -p 8080:8080 -p 50000:50000 -v jenkins_home:/var/jenkins_home jenkins/jenkins-lts.
+■	Критерии: UI Jenkins доступен по http://localhost:8080.
+2.	Задача (Настройка): Пройти "Getting Started". Получить initialAdminPassword (через docker logs ...). Установить плагины (Pipeline, Git).
+3.	Задача (Freestyle Job): Создать "Freestyle" (Свободная конфигурация) job.
+■	Задание: Source Code Management -> Git (указать URL). Build Steps -> Execute shell (echo "Hello Jenkins").
+■	Критерии: Нажать "Build Now", сборка (синий шар) успешна.
+4.	Задача (Теория): "Pipeline as Code".
+■	Контекст: Хранить "рецепт" сборки в коде (в Jenkinsfile), а не в UI Jenkins.
+■	Критерии: Вы понимаете, что UI (Freestyle) — это "старая школа".
+5.	Задача (Создание Jenkinsfile): В своем Git-репозитории (e.g., my-app) создать Jenkinsfile (декларативный синтаксис).
+■	pipeline { agent any ... stages { stage('Test') { steps { sh 'pytest' } } } }
+6.	Задача (Pipeline Job): В Jenkins создать новый Job типа Pipeline.
+■	Задание: Definition -> Pipeline script from SCM. Указать Git URL и Jenkinsfile.
+■	Критерии: "Build Now" -> Jenkins сам клонирует репо, находит Jenkinsfile и запускает pytest.
+7.	Задача (Docker-in-Docker): Настройка Jenkins для сборки Docker.
+■	Контекст: Jenkins (в Docker) не может "видеть" Docker хоста.
+■	Задание: (Сложно) Перезапустить Jenkins, "пробросив" docker.sock: -v /var/run/docker.sock:/var/run/docker.sock. Установить docker внутри Jenkins-контейнера.
+■	Критерии: В Jenkinsfile шаг sh 'docker ps' успешно выполняется.
+8.	Задача (Сборка Образа): Добавить stage('Build Image') в Jenkinsfile.
+■	steps { sh 'docker build -t my-app-jenkins:${BUILD_NUMBER} .' }
+■	Критерии: Jenkins успешно собирает Dockerfile.
+9.	Задача (Multibranch Pipeline): Создать Job типа Multibranch Pipeline.
+■	Контекст: Jenkins автоматически сканирует все ветки (branch) и PR в репозитории и запускает Jenkinsfile для каждой.
+■	Критерии: Jenkins находит main и feature/ ветки.
+10.	Задача (Credentials): Безопасная публикация.
+■	Задание: Добавить DOCKER_USERNAME / DOCKER_PASSWORD в Jenkins Credentials. В Jenkinsfile использовать withCredentials(...) { sh 'docker login ...' }.
+■	Критерии: Пайплайн пушит образ в Docker Hub, не "светя" пароль в логах.
+________________________________________
+●	Модуль 3: GitLab CI (Альтернативный CI/CD Локально)
+Цель модуля: Развернуть локально GitLab и GitLab Runner. Сравнить Jenkinsfile (Groovy) и .gitlab-ci.yml (YAML).
+1.	Задача (Развертывание GitLab): Запустить GitLab в Docker (используя docker-compose из документации GitLab).
+■	Контекст: Это "тяжелый" сервис, требует 4-8 ГБ RAM.
+■	Критерии: UI GitLab доступен (e.g., http://localhost:10080).
+2.	Задача (Настройка): Войти (root, пароль из docker logs), создать проект, "запушить" my-app в этот локальный GitLab.
+3.	Задача (Развертывание Runner): Запустить GitLab Runner в Docker.
+■	Задание: docker run ... gitlab/gitlab-runner:latest.
+4.	Задача (Регистрация Runner): Зарегистрировать Runner в GitLab.
+■	Задание: docker exec [runner] gitlab-runner register (указать URL, токен).
+■	Критерии: Runner виден в UI GitLab (в Settings -> CI/CD -> Runners).
+5.	Задача (.gitlab-ci.yml): Создать .gitlab-ci.yml в корне my-app.
+■	stages: [test, build]
+6.	Задача (Job test): Описать test job.
+■	test:
+■	image: python:3.10-slim
+■	script:
+■	- pip install -r requirements.txt
+■	- pytest
+■	Критерии: git push -> Runner "подхватывает" job -> Тесты проходят.
+7.	Задача (Docker-in-Docker): Настройка GitLab CI для сборки Docker.
+■	Контекст: GitLab CI использует image: docker:latest и services: [docker:dind].
+■	Критерии: Вы понимаете, что Runner запускает dind (Docker-in-Docker) как "братский" контейнер.
+8.	Задача (Job build): Описать build job.
+■	build:
+■	stage: build
+■	image: docker:latest
+■	services: [docker:dind]
+■	script:
+■	- docker login ... -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+■	- docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA .
+■	- docker push ...
+■	Контекст: $CI_... — это встроенные переменные GitLab CI. G. Задача (GitLab Registry): Включить встроенный Docker Registry в GitLab.
+■	Критерии: Пайплайн (Задача 8) пушит образ во внутренний Registry GitLab'а.
+9.	Задача (Сравнение): Написать эссе "Jenkins vs. GitLab CI".
+■	Критерии: Сравнили: Jenkinsfile (Groovy, гибкий, много плагинов) vs. .gitlab-ci.yml (YAML, простой, интегрирован с SCM/Registry).
+________________________________________
+(Начиная с М4, мы переходим в Kubernetes (Minikube))
+●	Модуль 4: K8s 101 (StatefulSet и Хранилища)
+Цель модуля: Перейти от Deployment (для stateless) к StatefulSet (для stateful приложений типа БД).
+1.	Задача (Теория): Deployment vs. StatefulSet.
+■	Контекст: Deployment (поды app-1a2b3c, app-4d5e6f). StatefulSet (поды pg-0, pg-1, pg-2).
+■	Задание: Написать эссе, почему БД (Postgres, Kafka) нельзя запускать в Deployment (нужны: стабильные имена, стабильные диски).
+■	Критерии: Эссе написано.
+2.	Задача (Теория): StorageClass (SC).
+■	Контекст: "Драйвер" для дисков (e.g., aws-ebs, gcp-pd). В Minikube это standard.
+■	Критерии: kubectl get sc показывает standard (default).
+3.	Задача (Теория): PersistentVolume (PV) и PersistentVolumeClaim (PVC).
+■	Контекст: PV — это "кусок" диска. PVC — это "запрос" (e.g., "Хочу 5 ГБ").
+4.	Задача (YAML - StatefulSet): Создать postgres-statefulset.yml.
+■	kind: StatefulSet, serviceName: "postgres-headless"
+5.	Задача (YAML - Headless Service): Создать postgres-headless-service.yml.
+■	spec: { clusterIP: None } (Нужен для StatefulSet, чтобы у подов были DNS-имена pg-0.postgres-headless, pg-1...).
+6.	Задача (YAML - volumeClaimTemplates): В спеке StatefulSet описать volumeClaimTemplates.
+■	Контекст: K8s автоматически создаст отдельный PVC для каждой реплики (pg-0 получит data-pg-0, pg-1 получит data-pg-1).
+■	Критерии: volumeClaimTemplates описан.
+7.	Задача (Применение): kubectl apply ...
+■	Критерии: kubectl get statefulset (1 Ready), kubectl get pods ( pg-0 Running), kubectl get pvc (data-pg-0 Bound).
+8.	Задача (Масштабирование): kubectl scale statefulset postgres --replicas=3.
+■	Критерии: K8s последовательно (один за другим) запускает pg-1 и pg-2, создавая data-pg-1 и data-pg-2.
+9.	Задача (Failover): "Убить" Pod: kubectl delete pod pg-1.
+■	Критерии: K8s немедленно перезапускает Pod pg-1. Он автоматически "подхватывает" свой старый диск data-pg-1. Данные не потеряны.
+10.	Задача (Развертывание MySQL и MongoDB через Helm):
+■	Задание: helm install mysql bitnami/mysql и helm install mongo bitnami/mongodb (которые внутри используют StatefulSet).
+■	Критерии: В кластере Minikube развернуты 3 разные СУБД (Postgres, MySQL, Mongo).
+________________________________________
+●	Модуль 5: K8s Networking (Ingress, NetworkPolicy, CoreDNS)
+Цель модуля: Углубиться в сетевое взаимодействие внутри и снаружи K8s.
+1.	Задача (Теория): Типы Service (ClusterIP, NodePort, LoadBalancer).
+■	Критерии: Вы можете объяснить, что ClusterIP (внутренний, по умолчанию), NodePort (для dev), LoadBalancer (для prod в облаке).
+2.	Задача (Теория): Ingress vs. Service.
+■	Контекст: Service (L4, TCP). Ingress (L7, HTTP/HTTPS). Ingress — это "умный" роутер (app.com/api -> app-service).
+3.	Задача (Установка Ingress): minikube addons enable ingress.
+■	Критерии: NGINX Ingress Controller запущен в kube-system.
+4.	Задача (YAML - Ingress Path-based): Создать app-ingress.yml.
+■	Задание: Настроить Ingress: path: /api/books -> book-service, path: /api/users -> user-service.
+■	Критерии: Ingress работает (тест через curl $(minikube ip)/api/books).
+5.	Задача (YAML - Ingress Host-based): Настроить Ingress (через hosts файл).
+■	Задание: host: books.my-app.local -> book-service, host: users.my-app.local -> user-service.
+■	Критерии: Маршрутизация по хосту работает.
+6.	Задача (Теория): CNI (Container Network Interface).
+■	Контекст: "Драйвер" сети. Flannel, Calico, WeaveNet.
+■	Критерии: Вы понимаете, что CNI отвечает за реальную сеть "pod-to-pod".
+7.	Задача (Теория): CoreDNS.
+■	Задание: kubectl get pods -n kube-system (найти coredns). kubectl exec -it [pod] ... cat /etc/resolv.conf.
+■	Критерии: Вы понимаете, что K8s Service Discovery (e.g., postgres-db) работает через CoreDNS.
+8.	Задача (YAML - NetworkPolicy): Изоляция Pod'ов.
+■	Контекст: По умолчанию все поды видят всех. NetworkPolicy — это "файрвол" K8s (требует CNI типа Calico).
+■	Задание: Создать NetworkPolicy: PodSelector: app=db (для Postgres) -> Ingress: [ { podSelector: app=api } ] (Разрешить Egress: нет).
+■	Критерии: api может достучаться до db, а hacker-pod — не может.
+9.	Задача (TLS-Termination): Настройка HTTPS на Ingress.
+■	Задание: kubectl create secret tls my-tls --cert=... --key=.... В Ingress добавить tls: [ { hosts: [my-app.local], secretName: my-tls } ].
+■	Критерии: https://my-app.local работает (SSL "терминируется" на Ingress).
+10.	Задача (Cert-Manager): Автоматизация Let's Encrypt.
+■	Задание: helm install cert-manager jetstack/cert-manager. Создать ClusterIssuer (для Let's Encrypt).
+■	Критерии: Ingress (через аннотации) автоматически запрашивает и обновляет SSL-сертификаты.
+●	Модуль 6: CI/CD Pipeline в Kubernetes (Jenkins)
+Цель модуля: Подключить наш Jenkins (из М2) к Minikube. Настроить CD-пайплайн, который деплоит приложение в K8s.
+1.	Задача (Теория): CI vs. CD (Recap). CI = docker push. CD = kubectl apply.
+2.	Задача (Плагины): Установить в Jenkins плагины Kubernetes и Kubernetes CLI (kubectl).
+3.	Задача (Credentials K8s): Настроить kubeconfig.
+■	Задание: Найти ~/.kube/config. Добавить его в Jenkins Credentials (тип File).
+■	Критерии: Jenkins безопасно хранит kubeconfig.
+4.	Задача (Agent): Настроить agent в Jenkinsfile.
+■	Контекст: Нам нужен agent (Runner), у которого есть kubectl.
+■	Задание: (Простой способ) agent { docker { image 'lachlanevenson/k8s-kubectl:v1.25.0' } }.
+■	Критерии: Jenkins-job будет запускаться в контейнере, где есть kubectl.
+5.	Задача (Jenkinsfile - Deploy stage): Добавить stage('Deploy to K8s').
+■	steps {
+■	withCredentials([file(credentialsId: 'minikube-config', variable: 'KUBECONFIG')]) {
+■	sh 'kubectl apply -f k8s/deployment.yml'
+■	}
+■	}
+■	Контекст: k8s/deployment.yml — это YAML'ы в вашем Git-репозитории.
+6.	Задача (Динамические Образы): deployment.yml "захардкожен" (image: my-app:latest). Это плохо.
+■	Задание: Использовать sed (Linux-утилита) в Jenkins-пайплайне для замены тега: sh "sed -i 's/IMAGE_TAG/${BUILD_NUMBER}/g' k8s/deployment.yml".
+■	Критерии: kubectl apply деплоит конкретную версию.
+7.	Задача (Helm + Jenkins): Использовать helm в CI/CD (Лучше, чем sed).
+■	Задание: Переписать Deploy stage: sh 'helm upgrade --install my-app ./helm-charts/my-app-chart --set image.tag=${BUILD_NUMBER}'.
+■	Критерии: Jenkins деплоит приложение через Helm.
+8.	Задача (Динамические окружения): (Теория).
+■	Контекст: Как деплоить feature/ ветки?
+■	Задание: Написать эссе, как бы Jenkinsfile (в Multibranch) создавал K8s Namespace (e.g., feature-xyz) и деплоил туда (через helm ... -n feature-xyz).
+■	Критерии: Эссе написано.
+9.	Задача (K8s Agent): (Супер-Advanced). Настроить Jenkins так, чтобы он запускал агентов (Runners) внутри K8s как Pod'ы.
+■	Задание: Изучить Jenkins Kubernetes Plugin. Настроить Cloud -> Kubernetes.
+■	Критерии: Build Now -> Jenkins автоматически создает jenkins-agent Pod в Minikube для выполнения stage.
+10.	Задача (Rollback): Добавить stage('Rollback on Failure').
+■	Задание: Использовать try...catch (в Groovy) в Jenkinsfile. В catch блоке выполнить sh 'helm rollback my-app'.
+■	Критерии: Если stage('Smoke Test') падает, Jenkins автоматически откатывает K8s-релиз.
+________________________________________
+●	Модуль 7: CI/CD Pipeline в Kubernetes (GitLab CI)
+Цель модуля: Интегрировать GitLab (из М3) с K8s. Сравнить подходы.
+1.	Задача (K8s-интеграция): (Новый способ) Установить GitLab K8s Agent.
+■	Задание: (В GitLab UI) Operate -> Kubernetes Clusters. Установить agentk в Minikube.
+■	Критерии: GitLab "видит" Minikube-кластер.
+2.	Задача (.gitlab-ci.yml - Deploy stage): Настроить deploy job.
+■	deploy:
+■	stage: deploy
+■	image: gcr.io/google.com/cloudsdktool/google-cloud-cli (содержит kubectl)
+■	script:
+■	- kubectl config use-context path/to/agent:my-cluster
+■	- kubectl apply -f k8s/deployment.yml
+3.	Задача (Helm + GitLab): Использовать Helm в GitLab CI.
+■	Задание: Использовать image: dtzar/helm-kubectl. script: [helm upgrade --install ...].
+■	Критерии: GitLab деплоит через Helm.
+4.	Задача (K8s Secrets в GitLab): Передать kubeconfig как переменную CI/CD (вместо Agent).
+■	Задание: cat ~/.kube/config | base64. Скопировать в Settings -> CI/CD -> Variables -> $KUBE_CONFIG.
+■	Критерии: script: [echo $KUBE_CONFIG | base64 -d > config.yml, kubectl --kubeconfig=config.yml apply ...].
+5.	Задача (Динамические Образы): Использовать sed (как в Jenkins) для замены IMAGE_TAG на $CI_COMMIT_SHA.
+■	Критерии: sed работает.
+6.	Задача (Helm + GitLab): Использовать --set (как в Jenkins).
+■	script: [helm upgrade ... --set image.tag=$CI_COMMIT_SHA].
+■	Критерии: Helm-деплой с динамическим тегом.
+7.	Задача (GitLab Auto DevOps): (Теория).
+■	Задание: Включить Auto DevOps (одной галочкой) в GitLab. git push.
+■	Критерии: Увидеть, как GitLab автоматически (используя Herokuish Buildpacks) собирает, тестирует, сканирует и деплоит приложение в K8s без .gitlab-ci.yml.
+8.	Задача (Review Apps): Настроить Auto DevOps (или вручную) для деплоя каждой feature/ ветки в K8s (в свой Namespace).
+■	Критерии: GitLab MR показывает ссылку "View App", которая ведет на живое приложение.
+9.	Задача (K8s Runner): Настроить GitLab Runner так, чтобы он запускал jobs как Pod'ы в самом K8s.
+■	Задание: helm install gitlab-runner gitlab/gitlab-runner --set rbac.create=true.
+■	Критерии: git push -> GitLab Runner создает Pod в Minikube для выполнения CI/CD-задачи.
+10.	Задача (Сравнение): Написать эссе "Jenkins K8s Agent vs. GitLab K8s Runner".
+■	Критерии: Вы понимаете, что оба решают одну задачу (динамические агенты в K8s), но GitLab делает это "нативнее".
+●	Модуль 8: K8s - Брокеры Сообщений (Kafka & RabbitMQ)
+Цель модуля: Развернуть отказоустойчивые (HA) брокеры сообщений в K8s, используя Helm и StatefulSet.
+1.	Задача (Теория): Сравнение Kafka и RabbitMQ.
+■	Контекст: RabbitMQ (Smart Broker / Dumb Consumer) — для "Команд" (Tasks). Kafka (Dumb Broker / Smart Consumer) — для "Событий" (Streams/Logs).
+■	Критерии: Вы можете объяснить, когда использовать Celery + RabbitMQ (задача), а когда Kafka (поток данных).
+2.	Задача (Helm Install Kafka): Развернуть Kafka с помощью Helm-чарта bitnami/kafka (или strimzi).
+■	Задание: helm install kafka bitnami/kafka.
+3.	Задача (Helm Values Kafka): Настроить StatefulSet.
+■	Задание: Изучить values.yaml чарта. Переустановить Kafka с кастомными values: persistence.enabled=true, replicaCount=3 (для HA).
+■	Критерии: kubectl get statefulset kafka показывает 3/3 реплики (kafka-0, kafka-1, kafka-2).
+4.	Задача (Тест Kafka): Подключиться к Kafka внутри K8s.
+■	Задание: Запустить kafkacat (в ubuntu Pod), "достучаться" до Kafka по K8s DNS (kafka.default.svc.cluster.local) и отправить/прочитать сообщение.
+5.	Задача (Helm Install RabbitMQ): Развернуть HA RabbitMQ.
+■	Задание: helm install rabbitmq bitnami/rabbitmq.
+6.	Задача (Helm Values RabbitMQ): Настроить RabbitMQ (Clustering).
+■	Задание: Изучить values.yaml. Переустановить с replicaCount=3 (StatefulSet) и clustering.enabled=true.
+■	Критерии: UI RabbitMQ (через port-forward) показывает 3 ноды в кластере.
+7.	Задача (App Config): Настроить приложение (e.g., my-app из CI/CD) для работы с брокерами.
+■	Задание: В ConfigMap приложения прописать K8s DNS-имена: KAFKA_BROKERS=kafka.default.svc.cluster.local:9092 и RABBITMQ_HOST=rabbitmq.default.svc.cluster.local.
+8.	Задача (App Deploy): Развернуть (через CI/CD или kubectl apply) приложение, которое использует эти брокеры.
+9.	Задача (Failover Test Kafka): "Убить" kafka-0: kubectl delete pod kafka-0.
+■	Критерии: StatefulSet немедленно перезапускает kafka-0. Он автоматически "подхватывает" свой PVC. Kafka продолжает работать (благодаря репликации).
+10.	Задача (Failover Test RabbitMQ): "Убить" rabbitmq-0.
+■	Критерии: StatefulSet перезапускает Pod. Кластер RabbitMQ (благодаря mirroring) не теряет сообщения.
+________________________________________
+●	Модуль 9: Observability Стек 1 - PLG (Prometheus, Loki, Grafana)
+Цель модуля: Развернуть "золотой стандарт" мониторинга (PLG Stack) и настроить сбор метрик и логов с наших приложений.
+1.	Задача (Теория): 3 столпа Observability.
+■	Контекст: 1. Metrics (Цифры, e.g., CPU 80% - Prometheus). 2. Logs (События, e.g., "User login" - Loki). 3. Traces (Путь запроса - Jaeger/Zipkin).
+■	Критерии: Вы понимаете разницу.
+2.	Задача (Helm Install Prometheus): Развернуть Prometheus Stack (включает Grafana, Alertmanager).
+■	Задание: helm repo add prometheus-community ...
+■	helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring --create-namespace
+3.	Задача (Доступ): kubectl port-forward -n monitoring svc/prometheus-k8s 9090 (Prometheus) и svc/prometheus-grafana 3000 (Grafana).
+■	Критерии: UI Prometheus и Grafana доступны в браузERE.
+4.	Задача (Изучение): Зайти в Grafana -> Dashboards. Изучить дашборды, которые kube-prometheus-stack установил автоматически (e.g., "K8s / Compute Resources / Cluster").
+■	Критерии: Вы видите графики CPU/Memory вашего Minikube-кластера.
+5.	Задача (App-side Metrics): "Выставить" метрики из my-app.
+■	Задание: Добавить в my-app библиотеку (e.g., micrometer-prometheus для Java, prometheus-client для Python) и эндпоинт /metrics.
+6.	Задача (YAML - ServiceMonitor): "Научить" Prometheus "находить" (scrape) наш my-app.
+■	Контекст: ServiceMonitor — это CRD (Custom Resource Definition), который говорит Prometheus: "Опрашивай все Service с меткой app=my-app по пути /metrics".
+■	Задание: Создать app-monitor.yml (kind: ServiceMonitor).
+■	Критерии: kubectl apply .... В UI Prometheus (Targets) my-app появился в списке целей.
+7.	Задача (Grafana Dashboard): В Grafana импортировать дашборд (e.g., "JVM Micrometer" или "Python FastAPI") и увидеть метрики приложения.
+8.	Задача (Helm Install Loki): Развернуть Loki (для логов).
+■	Задание: helm install loki grafana/loki-stack. (Он установит Loki и Promtail).
+9.	Задача (Promtail): Убедиться, что Promtail (сборщик логов) развернут как DaemonSet (по 1 Pod'у на каждую ноду).
+■	Критерии: kubectl get daemonset -n loki показывает loki-promtail.
+10.	Задача (Grafana + Loki): В Grafana (в Explore) выбрать DataSource: Loki.
+■	Задание: Написать LogQL-запрос: {app="my-app"} |= "ERROR".
+■	Критерии: Вы видите агрегированные логи со всех Pod'ов my-app в одном месте.
+________________________________________
+●	Модуль 10: Observability Стек 2 - ELK (Elastic, Logstash, Kibana)
+Цель модуля: Развернуть альтернативный (и более "тяжелый") стек для логирования (ELK) и сравнить его с PLG.
+1.	Задача (Теория): ELK vs. PLG.
+■	Контекст: ELK (Elasticsearch) — мощнейший поиск по логам (индексация). Loki — не индексирует логи, а индексирует метки (labels), что делает его легче, но медленнее на сложных запросах.
+■	Критерии: Вы понимаете, что ELK — для "глубокого анализа логов", Loki — для "быстрого просмотра логов к метрикам".
+2.	Задача (Helm Install Elasticsearch): Развернуть Elasticsearch (1 нода).
+■	Задание: helm repo add elastic https://helm.elastic.co.
+■	helm install elasticsearch elastic/elasticsearch -n logging --create-namespace.
+3.	Задача (Helm Install Kibana): Развернуть Kibana.
+■	Задание: helm install kibana elastic/kibana -n logging. (Настроить elasticsearchHosts).
+4.	Задача (Доступ): kubectl port-forward svc/kibana-kibana 5601.
+■	Критерии: UI Kibana доступен.
+5.	Задача (Log Shipper - Filebeat): Развернуть Filebeat.
+■	Контекст: Filebeat — это "агент", который читает логи с нод (как Promtail).
+■	Задание: helm install filebeat elastic/filebeat -n logging.
+6.	Задача (Config Filebeat): Настроить filebeat.yml (в values.yaml чарта) на autodiscover K8s-контейнеров и отправку логов в Elasticsearch (или Logstash).
+7.	Задача (Kibana Discover): Зайти в Kibana -> Management -> Index Patterns. Создать filebeat-* паттерн.
+■	Критерии: Вы видите "сырые" логи, поступающие от Filebeat.
+8.	Задача (Log Shipper - Logstash): (Опционально). Развернуть Logstash (между Filebeat и Elasticsearch).
+■	Контекст: Logstash нужен для сложной обработки/обогащения логов (e.g., grok парсинг).
+■	Задание: helm install logstash elastic/logstash -n logging. Перенастроить Filebeat -> Logstash -> Elasticsearch.
+9.	Задача (APM): (Бонус). Инструментировать Java/Python-приложение с помощью Elastic APM Agent (вместо Zipkin).
+■	Критерии: Трейсы (Traces) видны во вкладке APM в Kibana.
+10.	Задача (Сравнение): Написать эссе, сравнивая ресурсы (RAM/CPU) PLG (Loki) и ELK (Elasticsearch) в Minikube.
+■	Критерии: Вывод (ELK гораздо "тяжелее").
+________________________________________
+●	Модуль 11: Advanced K8s Networking (Service Mesh - Istio)
+Цель модуля: Перейти на "следующий уровень" K8s-сети. Внедрить Service Mesh (Istio) для автоматического mTLS, трейсинга, Canary-релизов и Circuit Breaking.
+1.	Задача (Теория): Что такое Service Mesh?
+■	Контекст: Мы вручную добавляли Resilience4j/Polly (Circuit Breaker) в код приложения. Istio делает это на уровне платформы (в sidecar-контейнере).
+■	Критерии: Вы понимаете, что Sidecar (Envoy proxy) "перехватывает" весь трафик.
+2.	Задача (Установка): Установить istioctl. Развернуть Istio в Minikube: istioctl install --set profile=demo.
+3.	Задача (Auto-Injection): "Включить" Istio для default namespace: kubectl label namespace default istio-injection=enabled.
+4.	Задача (Deploy): Передеплоить my-app (из М12).
+■	Критерии: kubectl get pods показывает READY 2/2 (App + Envoy Sidecar).
+5.	Задача (Kiali Dashboard): istioctl dashboard kiali.
+■	Критерии: Вы видите Kiali UI. Сгенерировав трафик, вы видите граф (Graph) ваших сервисов, который Istio нарисовал автоматически.
+6.	Задача (Tracing - Jaeger): istioctl dashboard jaeger.
+■	Критерии: Istio автоматически (без OTel) генерирует трейсы для HTTP-вызовов.
+7.	Задача (mTLS): Включить шифрование (mTLS) между Pod'ами.
+■	Задание: kubectl apply -f peer-authentication-strict.yml (mode: STRICT).
+■	Критерии: Трафик app -> db теперь зашифрован (даже внутри кластера).
+8.	Задача (Circuit Breaker): Настроить Circuit Breaker без кода.
+■	Задание: Создать DestinationRule.yml (описать outlierDetection: e.g., 5 ошибок -> eject на 1m).
+■	Критерии: Istio (Envoy) сам "размыкает цепь".
+9.	Задача (Canary Deploy): Развернуть my-app:v2.
+■	Задание: Создать VirtualService.yml. Настроить http: route:: 90% трафика (weight: 90) на my-app:v1 (subset v1), 10% (weight: 10) на my-app:v2 (subset v2).
+■	Критерии: Istio автоматически реализует Canary-релиз.
+10.	Задача (Ingress Gateway): Заменить NGINX Ingress на Istio IngressGateway.
+■	Задание: Создать K8s Gateway.yml (открыть порт 80) и VirtualService.yml (привязать к Gateway и роутить на my-app).
+■	Критерии: Трафик в кластер теперь идет через istio-ingressgateway (Envoy).
+________________________________________
+●	Модуль 12: Advanced K8s Storage (StorageClasses & CSI)
+Цель модуля: Глубоко понять, как K8s работает с блочными хранилищами, и научиться работать с RWX (ReadWriteMany) томами.
+1.	Задача (Теория): StorageClass (recap). Provisioner (что создает диск).
+2.	Задача (Теория): AccessModes: RWO (ReadWriteOnce) vs. RWX (ReadWriteMany).
+■	Контекст: RWO (Block storage, e.g., AWS EBS) — 1 Pod может писать. RWX (File storage, e.g., AWS EFS, NFS) — N Pod'ов могут писать.
+■	Критерии: Вы понимаете, почему Deployment (replicas=3) не может использовать RWO PVC (не запустится).
+3.	Задача (Теория): CSI (Container Storage Interface).
+■	Контекст: "Драйвер" (API), который позволяет K8s управлять любым хранилищем (Dell, NetApp, Ceph...).
+4.	Задача (local-path-provisioner): Установить local-path-provisioner в Minikube.
+■	Контекст: Предоставляет StorageClass (local-path), который быстро создает PV на локальном диске ноды (HostPath).
+■	Критерии: kubectl get sc показывает local-path.
+5.	Задача (Развертывание NFS Server): (RWX).
+■	Задание: helm install nfs-server bitnami/nfs-server-provisioner.
+■	Критерии: K8s автоматически создал StorageClass (e.g., nfs).
+6.	Задача (Создание PVC - RWX): Создать nfs-pvc.yml (storageClassName: nfs, accessModes: [ReadWriteMany]).
+7.	Задача (Тест RWX): Развернуть Deployment (replicas=2, image: busybox) который монтирует этот один nfs-pvc.
+8.	Задача (Проверка RWX): kubectl exec -it [pod-0] -- touch /data/test-from-pod-0.
+■	Критерии: kubectl exec -it [pod-1] -- ls /data. Файл test-from-pod-0 виден. Оба Pod'а пишут в один PV.
+9.	Задача (Теория Ceph + Rook): (Блочное/Объектное).
+■	Контекст: Ceph — "швейцарский нож" (Block, File, Object). Rook — "оператор" (K8s-native), который управляет Ceph.
+■	Задание: Изучить Rook.io. Написать эссе, как Rook позволяет создать "S3-хранилище" (Object Storage) внутри K8s.
+10.	Задача (Резервное копирование Velero):
+■	Задание: helm install velero .... Настроить Velero (e.g., с MinIO S3) для создания снапшотов (snapshots) PVC и бэкапа YAML-конфигураций.
+■	Критерии: velero backup create my-backup.
+________________________________________
+●	Модуль 13: GitOps (ArgoCD)
+Цель модуля: Внедрить GitOps (pull-based CD) как современную альтернативу Jenkins (push-based CD).
+1.	Задача (Теория): Push (Jenkins) vs. Pull (ArgoCD).
+■	Контекст: Jenkins (Push): CI-сервер имеет kubeconfig и "проталкивает" kubectl apply. ArgoCD (Pull): K8s-контроллер сам "смотрит" в Git и "притягивает" изменения.
+■	Критерии: Вы понимаете, что GitOps безопаснее (кластер не "выставляет" kubeconfig наружу).
+2.	Задача (Установка): helm install argocd argo/argo-cd -n argocd --create-namespace.
+3.	Задача (Доступ): kubectl port-forward ... и получить пароль (argocd-initial-admin-secret).
+■	Критерии: UI ArgoCD доступен.
+4.	Задача (Git Repo): Создать новый Git-репозиторий (my-app-k8s-config).
+■	Задание: Положить в него только YAML-файлы (deployment.yml, service.yml, ingress.yml) для my-app.
+■	Критерии: Git — наш "Единый Источник Правды".
+5.	Задача (App-of-Apps): Создать Application (CRD) в ArgoCD.
+■	Задание: (Через UI или YAML) kind: Application. Указать repoURL (наш Git-репо) и path (e.g., /) и destination: { server: https://kubernetes.default.svc }.
+6.	Задача (Sync): Нажать "Sync" в UI ArgoCD.
+■	Критерии: ArgoCD "увидел" YAML-ы в Git, выполнил kubectl apply, и my-app развернулся в K8s.
+7.	Задача (Drift Detection): Обнаружение "дрифта".
+■	Задание: kubectl edit deployment my-app --replicas=5 (ручное изменение).
+■	Критерии: UI ArgoCD немедленно показывает OutOfSync (Git=3, K8s=5).
+8.	Задача (Auto-Heal): Включить Automated Sync Policy (Auto-Heal).
+■	Критерии: ArgoCD автоматически (через 5 мин) "лечит" кластер, возвращая replicas=3.
+9.	Задача (CD Pipeline): Новый CI-пайплайн (Jenkins/GitLab).
+■	Задание: CI (в App репо) теперь только собирает image:v2 и пушит в Registry. CI не делает kubectl apply.
+10.	Задача (CD Pipeline - Part 2): Обновление GitOps.
+■	Задание: CI-пайплайн (в App репо) в конце делает git push в Config репо (из Задачи 4), меняя deployment.yml (e.g., image: my-app:v2).
+■	Критерии: ArgoCD видит этот push и автоматически (pull) обновляет приложение в K8s.
+________________________________________
+●	Модуль 14: K8s Security (RBAC, PodSecurity, Secrets)
+Цель модуля: Глубоко погрузиться в реальную безопасность K8s.
+1.	Задача (Теория): AuthN (Кто?) vs. AuthZ (Что?).
+■	Контекст: AuthN (Аутентификация) = kubeconfig (User) или ServiceAccount (Pod). AuthZ (Авторизация) = RBAC.
+2.	Задача (ServiceAccount): Создать ServiceAccount для my-app: kubectl create sa my-app-sa.
+3.	Задача (Role): Создать Role (в default namespace), который разрешает только get, list для ConfigMap.
+4.	Задача (RoleBinding): "Связать" Role и ServiceAccount: kubectl create rolebinding ... --role=... --serviceaccount=....
+5.	Задача (Deployment): В my-app-deployment.yml указать serviceAccountName: my-app-sa и отключить automountServiceAccountToken: false (если не нужен доступ к K8s API).
+6.	Задача (Тест RBAC): kubectl exec в my-app Pod (с curl и jq). Попытаться (используя token из /var/run/secrets/...) "прочитать" pods (получить 403 Forbidden) и "прочитать" configmaps (получить 200 OK).
+7.	Задача (NetworkPolicy): (Повтор) kind: NetworkPolicy.
+■	Задание: Создать политику default-deny-ingress (запретить весь входящий трафик в namespace).
+■	Критерии: my-app перестает отвечать.
+8.	Задача (NetworkPolicy): Разрешить трафик.
+■	Задание: Создать вторую политику, разрешающую Ingress (от ingress-nginx) и Prometheus (от monitoring) к my-app.
+■	Критерии: my-app снова отвечает.
+9.	Задача (Kube-bench): Запустить kube-bench (CIS Benchmarks) против Minikube и проанализировать отчет (e.g., "права на /etc/kubernetes слишком открыты").
+10.	Задача (Runtime Security - Falco): helm install falco ....
+■	Задание: kubectl exec -it my-app -- bash -c "touch /etc/mypasswords".
+■	Критерии: Falco (в логах) генерирует Critical алерт: "File opened in /etc".
+________________________________________
+●	Модуль 15: K8s High Availability (HA/HP) & Cluster Management
+Цель модуля: Теоретически понять, как K8s (который у нас в Minikube, 1 нода) превращается в реальный HA/HP-кластер в production.
+1.	Задача (Теория HA Control Plane): etcd.
+■	Контекст: etcd — это "мозг" K8s. Он должен быть в HA (3 или 5 нод).
+■	Задание: Нарисовать схему "Stacked" (etcd на Master-нодах) vs. "External" (etcd на отдельных VM).
+2.	Задача (Теория HA Worker Nodes):
+■	Контекст: "Ноды" (VM) должны быть в разных "Зонах Доступности" (AZ) в облаке (e.g., us-east-1a, us-east-1b).
+■	Критерии: Вы понимаете, что если 1 дата-центр (AZ) "умрет", кластер продолжит работать.
+3.	Задача (Теория Cluster Upgrades):
+■	Контекст: Как обновить K8s с 1.28 на 1.29?
+■	Задание: Изучить "Rolling updates" (kubeadm upgrade) vs. "Blue-Green" / "Immutable" (создание нового кластера и переключение трафика).
+4.	Задача (Практика kubeadm): (Super-Advanced).
+■	Задание: (Вместо Minikube) Использовать Vagrant или Multipass для создания 3 VM. На них вручную развернуть HA-кластер (1 master, 2 workers) с помощью kubeadm init и kubeadm join.
+■	Критерии: kubectl get nodes показывает 3 ноды.
+5.	Задача (HPA - Horizontal Pod Autoscaler): Настроить HPA для my-app.
+■	Задание: kind: HorizontalPodAutoscaler. minReplicas: 3, maxReplicas: 10. metrics: [ { type: Resource, resource: { name: cpu, target: { averageUtilization: 50 } } } ].
+6.	Задача (Metrics Server): minikube addons enable metrics-server (HPA нужен источник метрик).
+7.	Задача (HPA Test): helm install load-tester ... (или hey). Нагрузить my-app.
+■	Критерии: kubectl get hpa. REPLICAS автоматически растет с 3 до 10.
+8.	Задача (VPA - Vertical Pod Autoscaler): (Теория).
+■	Задание: Изучить VPA. Написать эссе, чем VPA (меняет requests/limits у Pod'а) отличается от HPA (меняет количество Pod'ов).
+9.	Задача (Cluster Autoscaler): (Теория).
+■	Контекст: Что если HPA хочет 100 Pod'ов, а на 3-х нодах "место" кончилось?
+■	Задание: Изучить Cluster Autoscaler. Он автоматически заказывает у AWS/GCP новые ноды (VM) и добавляет их в кластер.
+10.	Задача (Инструменты): k9s и Lens.
+■	Задание: Установить k9s (TUI - Terminal UI) и Lens (GUI).
+■	Критерии: Вы можете управлять Minikube-кластером (смотреть логи, Pod'ы, exec) через k9s / Lens, а не только kubectl.
+
