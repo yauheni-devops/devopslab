@@ -1,0 +1,214 @@
+1. Установка Hadolint и анализ Dockerfile
+bash
+# Установка Hadolint
+curl -L https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64 -o /usr/local/bin/hadolint
+sudo chmod +x /usr/local/bin/hadolint
+
+# Анализ плохого Dockerfile
+hadolint Dockerfile.bad
+# Результат: 8 ошибок/предупреждений (DL3008, DL3015, DL3009, DL3059, DL3042, DL3013)
+
+
+
+
+2. Оптимизация Dockerfile и сравнение слоев
+bash
+# Сборка плохого образа
+docker build -f Dockerfile.bad -t my-app:1.0 .
+
+# Сборка хорошего образа (с объединенными RUN)
+docker build -f Dockerfile.good -t my-app:2.0 .
+
+# Сравнение количества слоев
+echo "Плохой: $(docker history my-app:1.0 | wc -l) слоев"
+echo "Хороший: $(docker history my-app:2.0 | wc -l) слоев"
+# Результат: 13 слоев → 8 слоев
+
+
+
+
+
+
+3. Установка Trivy и сканирование уязвимостей
+bash
+# Установка Trivy
+curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+
+# Сканирование старого образа
+trivy image my-app:1.0
+# Результат: множество HIGH/CRITICAL уязвимостей
+
+# Сканирование нового образа
+trivy image --severity HIGH,CRITICAL my-app:2.0
+# Результат: 0 HIGH/CRITICAL уязвимостей
+
+
+
+
+
+
+4. BuildKit
+bash
+# Обычная сборка (линейный вывод)
+docker build -f Dockerfile.good -t my-app:normal .
+
+# Сборка с BuildKit (древовидный вывод)
+DOCKER_BUILDKIT=1 docker build -f Dockerfile.good -t my-app:buildkit .
+# Результат: вывод стал древовидным, видна структура зависимостей
+
+
+
+
+
+5. BuildKit Cache
+bash
+# Создание Dockerfile с кэшированием pip
+cat > Dockerfile.cache <<'EOF'
+# syntax=docker/dockerfile:1
+FROM python:3.11-slim-bullseye
+WORKDIR /app
+COPY requirements.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
+COPY . .
+CMD ["python", "app.py"]
+EOF
+
+# Первая сборка (скачивает пакеты)
+DOCKER_BUILDKIT=1 docker build -f Dockerfile.cache -t my-app:cache .
+
+# Очистка кэша сборщика
+docker builder prune -f
+
+# Вторая сборка (использует кэш pip)
+DOCKER_BUILDKIT=1 docker build -f Dockerfile.cache -t my-app:cache .
+# Результат: быстрее, видно CACHED
+
+
+
+
+
+
+
+6. Multi-arch сборка
+bash
+# Установка QEMU для эмуляции
+docker run --privileged --rm tonistiigi/binfmt --install all
+
+# Создание buildx билдера
+docker buildx create --name mybuilder --use
+docker buildx inspect --bootstrap
+
+# Сборка для AMD64 и ARM64
+docker buildx build --platform linux/amd64,linux/arm64 \
+    -f Dockerfile.multi -t my-app:multi .
+# Результат: образ собран для 2 архитектур
+
+
+
+
+
+
+
+
+7. Build Secrets
+bash
+# Создание секретного файла
+cat > pip.conf <<'EOF'
+[global]
+index-url = https://my-private-pypi.com/simple
+trusted-host = my-private-pypi.com
+EOF
+
+# Сборка с секретами
+DOCKER_BUILDKIT=1 docker build -f Dockerfile.secrets \
+    --secret id=pip_config,src=pip.conf \
+    -t my-app:secrets .
+
+# Проверка, что секрет не сохранился
+docker history my-app:secrets | grep -i pip || echo "✅ Секреты не сохранены"
+
+
+
+
+
+
+8. Distroless (минимальный образ)
+bash
+# Создание Go приложения
+cat > main.go <<'EOF'
+package main
+import "fmt"
+import "net/http"
+func main() {
+    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+        fmt.Fprintf(w, "Hello, Distroless!")
+    })
+    http.ListenAndServe(":8080", nil)
+}
+EOF
+
+# Сборка distroless образа
+docker build -f Dockerfile.distroless -t myapp:distroless .
+
+# Проверка размера
+docker images myapp:distroless
+# Результат: 17 МБ!
+
+# Проверка, что bash отсутствует
+docker run --rm -it myapp:distroless bash 2>/dev/null || echo "✅ Bash отсутствует"
+
+
+
+
+
+
+9. Docker Compose Override
+bash
+# Создание prod конфигурации
+cat > docker-compose.yml <<'EOF'
+version: '3.8'
+services:
+  web:
+    image: my-app:latest
+    ports: ["80:5000"]
+    environment: [FLASK_ENV=production]
+EOF
+
+# Создание dev конфигурации (override)
+cat > docker-compose.override.yml <<'EOF'
+version: '3.8'
+services:
+  web:
+    build: .
+    ports: ["5000:5000"]
+    volumes: [.:/app]
+    environment: [FLASK_ENV=development]
+EOF
+
+# Проверка dev (с override)
+docker-compose config | grep -E "build:|image:"
+# Результат: видно build: и volumes
+
+# Проверка prod (без override)
+docker-compose -f docker-compose.yml config | grep -E "image:"
+# Результат: видно image: my-app:latest
+
+
+
+
+
+10. Финальная проверка всех образов
+bash
+# Список всех образов с сортировкой по размеру
+docker images --format "{{.Repository}}:{{.Tag}}\t{{.Size}}" | grep -E "my-app|myapp" | sort -k2 -h
+
+# Результат:
+# myapp:distroless   17MB     🏆 САМЫЙ МАЛЕНЬКИЙ
+# my-app:multi       238MB
+# my-app:2.0         291MB
+# my-app:buildkit    291MB
+# my-app:normal      291MB
+# my-app:secrets     321MB
+# my-app:cache       329MB
+# my-app:1.0         823MB
