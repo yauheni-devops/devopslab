@@ -1,4 +1,4 @@
-1. Запуск Jenkins в Docker
+✅ 1. Запуск Jenkins в Docker
 bash
 docker run -d -p 8080:8080 -p 50000:50000 -v jenkins_home:/var/jenkins_home jenkins/jenkins:lts
 Комментарий: Запускаем Jenkins в контейнере. Порт 8080 — для веб-интерфейса, 50000 — для агентов. Данные сохраняются в томе jenkins_home.
