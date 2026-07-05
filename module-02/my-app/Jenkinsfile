@@ -3,7 +3,7 @@ pipeline {
     
     environment {
         IMAGE_NAME = 'my-app-jenkins'
-        DOCKER_HUB_USER = 'yauhenifiliuta'  // 👈 ВАШ DOCKER ID
+        DOCKER_HUB_USER = 'yauhenifiliuta'
     }
     
     stages {
