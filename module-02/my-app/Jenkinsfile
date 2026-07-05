@@ -3,6 +3,7 @@ pipeline {
     
     environment {
         IMAGE_NAME = 'my-app-jenkins'
+        DOCKER_HUB_USER = 'yauhenifiliuta'  // 👈 ВАШ DOCKER ID
     }
     
     stages {
@@ -24,11 +25,38 @@ pipeline {
             steps {
                 sh '''
                     echo "Building Docker image..."
-                    # Переходим в директорию с Dockerfile
                     cd module-02/my-app
                     docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .
                     docker images | grep ${IMAGE_NAME}
                 '''
+            }
+        }
+        
+        stage('Push to Docker Hub') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'docker-hub-credentials',
+                        usernameVariable: 'DOCKER_USERNAME',
+                        passwordVariable: 'DOCKER_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        echo "Logging in to Docker Hub..."
+                        echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
+                        
+                        echo "Tagging image..."
+                        docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${DOCKER_HUB_USER}/${IMAGE_NAME}:${BUILD_NUMBER}
+                        docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${DOCKER_HUB_USER}/${IMAGE_NAME}:latest
+                        
+                        echo "Pushing to Docker Hub..."
+                        docker push ${DOCKER_HUB_USER}/${IMAGE_NAME}:${BUILD_NUMBER}
+                        docker push ${DOCKER_HUB_USER}/${IMAGE_NAME}:latest
+                        
+                        echo "Logging out..."
+                        docker logout
+                    '''
+                }
             }
         }
     }
