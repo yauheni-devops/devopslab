@@ -1,0 +1,146 @@
+1. Запуск Jenkins в Docker
+bash
+docker run -d -p 8080:8080 -p 50000:50000 -v jenkins_home:/var/jenkins_home jenkins/jenkins:lts
+Комментарий: Запускаем Jenkins в контейнере. Порт 8080 — для веб-интерфейса, 50000 — для агентов. Данные сохраняются в томе jenkins_home.
+
+✅ 2. Получение пароля администратора
+bash
+docker logs <container_id> 2>&1 | grep -A 5 "password"
+Комментарий: Смотрим логи контейнера, чтобы найти пароль для первого входа в Jenkins.
+
+✅ 3. Запуск Jenkins с пробросом Docker-сокета
+bash
+docker run -d -p 8080:8080 -p 50000:50000 -v jenkins_home:/var/jenkins_home -v /var/run/docker.sock:/var/run/docker.sock --name jenkins-with-docker jenkins/jenkins:lts
+Комментарий: Перезапускаем Jenkins с пробросом сокета Docker хоста, чтобы Jenkins мог выполнять Docker-команды.
+
+✅ 4. Установка Docker CLI внутри контейнера
+bash
+docker exec -it --user root jenkins-with-docker bash
+apt-get update
+apt-get install -y docker.io
+chmod 666 /var/run/docker.sock
+exit
+Комментарий: Заходим в контейнер как root, устанавливаем Docker CLI и даём права на сокет, чтобы пользователь jenkins мог работать с Docker.
+
+✅ 5. Создание Jenkinsfile
+bash
+cd ~/devopslab/module-02/my-app
+
+cat > Jenkinsfile << 'EOF'
+pipeline {
+    agent any
+    stages {
+        stage('Test') {
+            steps {
+                sh 'echo "Running tests..."'
+                sh 'echo "All tests passed!"'
+            }
+        }
+    }
+}
+EOF
+Комментарий: Создаём файл Jenkinsfile — это рецепт сборки, который Jenkins будет выполнять.
+
+✅ 6. Добавление сборки Docker-образа в Jenkinsfile
+bash
+cat > Jenkinsfile << 'EOF'
+pipeline {
+    agent any
+    stages {
+        stage('Test') {
+            steps {
+                sh 'echo "Running tests..."'
+                sh 'echo "All tests passed!"'
+            }
+        }
+        stage('Build Image') {
+            steps {
+                sh '''
+                    cd module-02/my-app
+                    docker build -t my-app-jenkins:${BUILD_NUMBER} .
+                '''
+            }
+        }
+    }
+}
+EOF
+Комментарий: Добавляем в Jenkinsfile стадию сборки Docker-образа.
+
+✅ 7. Добавление публикации в Docker Hub
+bash
+cat > Jenkinsfile << 'EOF'
+pipeline {
+    agent any
+    environment {
+        DOCKER_HUB_USER = 'yauhenifiliuta'
+    }
+    stages {
+        stage('Test') {
+            steps {
+                sh 'echo "Running tests..."'
+                sh 'echo "All tests passed!"'
+            }
+        }
+        stage('Build Image') {
+            steps {
+                sh '''
+                    cd module-02/my-app
+                    docker build -t my-app-jenkins:${BUILD_NUMBER} .
+                '''
+            }
+        }
+        stage('Push to Docker Hub') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'docker-hub-credentials',
+                        usernameVariable: 'DOCKER_USERNAME',
+                        passwordVariable: 'DOCKER_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
+                        docker tag my-app-jenkins:${BUILD_NUMBER} ${DOCKER_HUB_USER}/my-app-jenkins:${BUILD_NUMBER}
+                        docker tag my-app-jenkins:${BUILD_NUMBER} ${DOCKER_HUB_USER}/my-app-jenkins:latest
+                        docker push ${DOCKER_HUB_USER}/my-app-jenkins:${BUILD_NUMBER}
+                        docker push ${DOCKER_HUB_USER}/my-app-jenkins:latest
+                        docker logout
+                    '''
+                }
+            }
+        }
+    }
+}
+EOF
+Комментарий: Добавляем стадию, которая логинится в Docker Hub через скрытые переменные (пароль не светится), тегирует и пушит образ.
+
+✅ 8. Коммит и пуш в Git
+bash
+git add Jenkinsfile
+git commit -m "Add Jenkinsfile with Docker build and push"
+git push
+Комментарий: Отправляем обновлённый Jenkinsfile в репозиторий на GitHub.
+
+✅ 9. Создание Multibranch Pipeline в Jenkins (через UI)
+New Item → Multibranch Pipeline
+
+Branch Sources → Git → https://github.com/yauheni-devops/devopslab.git
+
+Script Path: module-02/my-app/Jenkinsfile
+
+Комментарий: Настраиваем Jenkins так, чтобы он сам сканировал все ветки репозитория и для каждой запускал сборку по Jenkinsfile.
+
+✅ 10. Добавление Credentials (токена Docker Hub) в Jenkins (через UI)
+Manage Jenkins → Manage Credentials → Global
+
+Add Credentials → Username with password
+
+Username: yauhenifiliuta
+
+Password: dckr_pat_... (токен)
+
+ID: docker-hub-credentials
+
+Комментарий: Сохраняем секретный токен Docker Hub в защищённом хранилище Jenkins.
+
+

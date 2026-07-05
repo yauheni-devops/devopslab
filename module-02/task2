@@ -1,0 +1,125 @@
+Введение
+В рамках модуля была поставлена задача:
+
+Развернуть Jenkins в Docker.
+
+Настроить взаимодействие Jenkins с Git и Docker.
+
+Реализовать пайплайн как код (Pipeline as Code).
+
+Настроить автоматическую сборку и публикацию образов в Docker Hub.
+
+Все работы выполнялись на локальной виртуальной машине (Ubuntu 22.04) с использованием Docker, Git, Jenkins и Docker Hub.
+
+2. Выполненные задачи (по порядку)
+2.1. Развертывание Jenkins в Docker
+Jenkins был развернут в контейнере на основе официального образа jenkins/jenkins:lts.
+
+Контейнеру были проброшены порты 8080 (UI) и 50000 (агенты).
+
+Данные Jenkins сохранены в томе jenkins_home.
+
+После запуска был получен пароль администратора из логов контейнера.
+
+Итог: Jenkins доступен по адресу http://localhost:8080.
+
+2.2. Настройка Jenkins (Getting Started)
+Выполнен вход с использованием initialAdminPassword.
+
+Установлены рекомендуемые плагины: Pipeline, Git, Docker Pipeline и др.
+
+Создан учетная запись администратора.
+
+Итог: Jenkins готов к созданию задач.
+
+2.3. Создание Freestyle Job
+Создана Freestyle-задача My-Freestyle-Job.
+
+Настроен Source Code Management (Git) с репозиторием https://github.com/jenkins-docs/simple-java-maven-app.git.
+
+Добавлен шаг сборки Execute shell с командой echo "Hello Jenkins".
+
+Сборка выполнена успешно (синий шар).
+
+Итог: Jenkins может клонировать репозиторий и выполнять shell-команды.
+
+2.4. Переход к Pipeline as Code (теория)
+Освоена концепция Pipeline as Code: рецепт сборки хранится в Jenkinsfile в репозитории.
+
+Это позволяет версионировать настройки сборки и использовать Git для отслеживания изменений.
+
+Итог: Выбран подход с Jenkinsfile для всех последующих задач.
+
+2.5. Создание Jenkinsfile
+В локальном репозитории devopslab создан файл module-02/my-app/Jenkinsfile.
+
+Первая версия Jenkinsfile содержала одну стадию Test с выводом echo "Running tests...".
+
+Итог: Jenkinsfile создан и запушен в GitHub.
+
+2.6. Создание Pipeline Job
+В Jenkins создана задача типа Pipeline с именем My-Pipeline-Job.
+
+Настроен параметр Pipeline script from SCM с указанием репозитория и пути к Jenkinsfile.
+
+Сборка прошла успешно — Jenkins самостоятельно клонировал репозиторий и выполнил пайплайн.
+
+Итог: Jenkins успешно выполняет код из Jenkinsfile.
+
+2.7. Настройка Docker-in-Docker
+Для работы с Docker внутри Jenkins-контейнера был проброшен сокет хоста: -v /var/run/docker.sock:/var/run/docker.sock.
+
+Внутри контейнера установлен Docker CLI.
+
+Пользователю jenkins выданы права на доступ к сокету.
+
+Итог: Jenkins может выполнять команды docker ps и docker build.
+
+2.8. Сборка Docker-образа
+В Jenkinsfile добавлена стадия Build Image.
+
+В папке module-02/my-app создан простой Dockerfile (на основе alpine с установкой curl).
+
+Сборка образа выполняется с тегом my-app-jenkins:${BUILD_NUMBER}.
+
+Стадия успешно отработала.
+
+Итог: Jenkins собирает Docker-образы внутри контейнера.
+
+2.9. Создание Multibranch Pipeline
+Создана задача типа Multibranch Pipeline с именем My-Multibranch-Pipeline.
+
+Указан источник (Git) и путь к Jenkinsfile.
+
+Jenkins просканировал репозиторий и обнаружил две ветки: master и feature/test-branch.
+
+Для каждой ветки запущена собственная сборка.
+
+Итог: Jenkins автоматически обрабатывает все ветки репозитория.
+
+2.10. Безопасная публикация в Docker Hub
+В Docker Hub создан Personal Access Token.
+
+В Jenkins добавлены Credentials (токен) с идентификатором docker-hub-credentials.
+
+В Jenkinsfile добавлена стадия Push to Docker Hub, использующая withCredentials.
+
+Образ успешно запушен в репозиторий yauhenifiliuta/my-app-jenkins с тегами latest и номером сборки.
+
+Пароль и токен скрыты в логах (отображаются как ****).
+
+Итог: Образ опубликован в Docker Hub безопасно и автоматически.
+
+
+
+
+Используемые технологии
+Docker — контейнеризация Jenkins и сборка образов.
+
+Jenkins — CI/CD-сервер.
+
+Git — контроль версий.
+
+GitHub — хостинг репозитория.
+
+Docker Hub — реестр образов.
