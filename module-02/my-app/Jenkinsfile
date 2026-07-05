@@ -3,7 +3,8 @@ pipeline {
     
     environment {
         IMAGE_NAME = 'my-app-jenkins'
-        DOCKER_HUB_USER = 'yauhenifiliuta'
+        // 👇 УБЕДИТЕСЬ, ЧТО ЗДЕСЬ ВАШ ТОЧНЫЙ ЛОГИН С DOCKER HUB
+        DOCKER_HUB_USER = 'yauhenifiliuta' 
     }
     
     stages {
@@ -32,6 +33,9 @@ pipeline {
             }
         }
         
+        // ----------------------------------------------------
+        // НОВАЯ СТАДИЯ: ПУБЛИКАЦИЯ В DOCKER HUB
+        // ----------------------------------------------------
         stage('Push to Docker Hub') {
             steps {
                 withCredentials([
@@ -59,5 +63,6 @@ pipeline {
                 }
             }
         }
+        // ----------------------------------------------------
     }
 }
