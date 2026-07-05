@@ -1,11 +1,32 @@
 pipeline {
     agent any
     
+    environment {
+        IMAGE_NAME = 'my-app-jenkins'
+    }
+    
     stages {
         stage('Test') {
             steps {
                 sh 'echo "Running tests..."'
                 sh 'echo "All tests passed!"'
+            }
+        }
+        
+        stage('Check Docker') {
+            steps {
+                sh 'docker ps'
+                sh 'docker --version'
+            }
+        }
+        
+        stage('Build Image') {
+            steps {
+                sh '''
+                    echo "Building Docker image..."
+                    docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .
+                    docker images | grep ${IMAGE_NAME}
+                '''
             }
         }
     }
