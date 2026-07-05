@@ -24,6 +24,8 @@ pipeline {
             steps {
                 sh '''
                     echo "Building Docker image..."
+                    # Переходим в директорию с Dockerfile
+                    cd module-02/my-app
                     docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .
                     docker images | grep ${IMAGE_NAME}
                 '''
