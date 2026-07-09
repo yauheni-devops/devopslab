@@ -1,0 +1,201 @@
+1. Попытка развернуть GitLab
+
+```bash
+# Создание директорий для GitLab
+mkdir -p gitlab/{config,logs,data}
+```
+
+```bash
+# Запуск GitLab в Docker
+docker run -d \
+  --name gitlab-local \              # имя контейнера
+  --restart always \                 # автоматический перезапуск
+  --hostname localhost \             # хостнейм
+  -p 8080:8080 \                     # проброс порта 8080
+  -p 2222:22 \                       # проброс SSH порта
+  -v $(pwd)/gitlab/config:/etc/gitlab \   # монтирование конфига
+  -v $(pwd)/gitlab/logs:/var/log/gitlab \ # монтирование логов
+  -v $(pwd)/gitlab/data:/var/opt/gitlab \ # монтирование данных
+  -e GITLAB_OMNIBUS_CONFIG="..." \    # конфигурация GitLab
+  gitlab/gitlab-ce:latest             # образ GitLab
+```
+
+**Результат:** GitLab запустился, но не отвечал (502 ошибка), застрял на стадии `Preloading application`.
+
+---
+
+### 2. Диагностика проблем GitLab
+
+```bash
+# Проверка статуса контейнера
+docker ps | grep gitlab
+# Вывод: статус (unhealthy)
+
+# Просмотр логов для поиска ошибок
+docker logs --tail 50 gitlab-local
+# Обнаружена ошибка: Address already in use - bind(2) for "127.0.0.1" port 8080
+```
+
+```bash
+# Проверка статуса сервисов внутри GitLab
+docker exec gitlab-local gitlab-ctl status
+# Puma запущен, но не может привязаться к порту
+```
+
+**Проблема:** Puma (Rails сервер) пытался слушать порт 8080, но он уже занят Nginx. Настройка не применялась через переменные окружения.
+
+---
+
+### 3. Установка Gitea (альтернатива GitLab)
+
+```bash
+# Остановка и удаление GitLab
+docker stop gitlab-local
+docker rm gitlab-local
+```
+
+```bash
+# Создание папки для Gitea
+mkdir -p gitea
+```
+
+```bash
+# Запуск Gitea в Docker
+docker run -d \
+  --name gitea \                     # имя контейнера
+  --restart always \                 # автоматический перезапуск
+  -p 8080:3000 \                     # проброс порта 8080 на 3000
+  -p 2222:22 \                       # проброс SSH порта
+  -v $(pwd)/gitea:/data \            # монтирование данных
+  gitea/gitea:latest                 # образ Gitea
+```
+
+```bash
+# Создание директорий для репозиториев внутри контейнера
+docker exec gitea mkdir -p /data/git/repositories /data/git/lfs
+```
+
+**Результат:** Gitea успешно запустился за 30 секунд!
+
+---
+
+### 4. Настройка Gitea
+
+Через веб-интерфейс `http://localhost:8080`:
+- Тип БД: SQLite3
+- Название сайта: My Git Server
+- Пути: `/data/git/repositories`, `/data/git/lfs`
+- Домен: `localhost`
+- URL: `http://localhost:8080/`
+
+Создан пользователь:
+- Логин: `root`
+- Пароль: `Password123!`
+
+---
+
+### 5. Создание проекта и заливка кода
+
+```bash
+# Переход в папку проекта
+cd ~/devopslab/module-03/my-app
+```
+
+```bash
+# Создание файлов приложения
+cat > app.py << 'EOF'
+def hello():
+    return "Hello, World!"
+
+def add(a, b):
+    return a + b
+EOF
+```
+
+```bash
+# Создание тестов
+cat > test_app.py << 'EOF'
+from app import hello, add
+
+def test_hello():
+    assert hello() == "Hello, World!"
+
+def test_add():
+    assert add(2, 3) == 5
+EOF
+```
+
+```bash
+# Создание зависимостей
+cat > requirements.txt << 'EOF'
+pytest==7.4.0
+EOF
+```
+
+```bash
+# Создание README
+touch README.md
+```
+
+```bash
+# Инициализация Git и первый коммит
+git init
+git checkout -b main
+git add README.md app.py test_app.py requirements.txt
+git commit -m "first commit"
+```
+
+```bash
+# Добавление удаленного репозитория и пуш
+git remote add origin http://localhost:8080/root/my-app.git
+git push -u origin main
+# Пароль: Password123!
+```
+
+**Результат:** Код успешно загружен в Gitea.
+
+---
+
+### 6. Настройка CI/CD (Gitea Actions)
+
+```bash
+# Создание папки для workflow
+mkdir -p .gitea/workflows
+```
+
+```bash
+# Создание файла пайплайна
+cat > .gitea/workflows/test.yml << 'EOF'
+name: Test
+
+on: [push]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container: python:3.10-slim
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      
+      - name: Run tests
+        run: |
+          pytest
+EOF
+```
+
+```bash
+# Добавление, коммит и пуш
+git add .gitea/workflows/test.yml
+git commit -m "Add CI/CD pipeline"
+git push
+```
+
+**Результат:** Пайплайн запустился и успешно выполнил тесты!
+
+
