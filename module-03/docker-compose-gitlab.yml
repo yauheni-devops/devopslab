@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  gitlab:
+    image: gitlab/gitlab-ce:latest
+    container_name: gitlab-local
+    restart: always
+    hostname: 'localhost'
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://localhost:10080'
+        gitlab_rails['gitlab_shell_ssh_port'] = 2222
+        # Включаем Registry
+        registry['enable'] = true
+        registry_external_url 'http://localhost:10080:5000'
+    ports:
+      - '10080:10080'    # Web UI
+      - '2222:22'        # SSH для Git
+      - '15000:5000'     # Docker Registry
+    volumes:
+      - ./gitlab/config:/etc/gitlab
+      - ./gitlab/logs:/var/log/gitlab
+      - ./gitlab/data:/var/opt/gitlab
+    shm_size: '256m'
