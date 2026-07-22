@@ -317,3 +317,4 @@ data-mongo-mongodb-0             Bound    ...      1Gi        RWO            sta
 ✅ **10.** MySQL и MongoDB развёрнуты через Helm  
 
 **В кластере Minikube работают 3 СУБД:** PostgreSQL, MySQL, MongoDB — все используют StatefulSet! 🎉
+Новое содержимое
