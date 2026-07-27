@@ -1,0 +1,30 @@
+(Начиная с М4, мы переходим в Kubernetes (Minikube))
+● 	Модуль 4: K8s 101 (StatefulSet и Хранилища)
+ Цель модуля: Перейти от Deployment (для stateless) к StatefulSet (для stateful приложений типа БД).
+1.	Задача (Теория): Deployment vs. StatefulSet.
+■ 	Контекст: Deployment (поды app-1a2b3c, app-4d5e6f). StatefulSet (поды pg-0, pg-1, pg-2).
+■     Задание: Написать эссе, почему БД (Postgres, Kafka) нельзя запускать в Deployment (нужны: стабильные имена, стабильные диски).
+■     Критерии: Эссе написано.
+2.    Задача (Теория): StorageClass (SC).
+■     Контекст: "Драйвер" для дисков (e.g., aws-ebs, gcp-pd). В Minikube это standard.
+■ 	Критерии: kubectl get sc показывает standard (default).
+3.	Задача (Теория): PersistentVolume (PV) и PersistentVolumeClaim (PVC).
+■     Контекст: PV — это "кусок" диска. PVC — это "запрос" (e.g., "Хочу 5 ГБ").
+4.	Задача (YAML - StatefulSet): Создать postgres-statefulset.yml.
+■ 	kind: StatefulSet, serviceName: "postgres-headless"
+5.	Задача (YAML - Headless Service): Создать postgres-headless-service.yml.
+■ 	spec: { clusterIP: None } (Нужен для StatefulSet, чтобы у подов были DNS-имена pg-0.postgres-headless, pg-1...).
+6.	Задача (YAML - volumeClaimTemplates): В спеке StatefulSet описать volumeClaimTemplates.
+■     Контекст: K8s автоматически создаст отдельный PVC для каждой реплики (pg-0 получит data-pg-0, pg-1 получит data-pg-1).
+■     Критерии: volumeClaimTemplates описан.
+7.    Задача (Применение): kubectl apply ...
+■ 	Критерии: kubectl get statefulset (1 Ready), kubectl get pods ( pg-0 Running), kubectl get pvc (data-pg-0 Bound).
+8.	Задача (Масштабирование): kubectl scale statefulset postgres --replicas=3.
+■     Критерии: K8s последовательно (один за другим) запускает pg-1 и pg-2, создавая data-pg-1 и data-pg-2.
+9.	Задача (Failover): "Убить" Pod: kubectl delete pod pg-1.
+■     Критерии: K8s немедленно перезапускает Pod pg-1. Он автоматически "подхватывает" свой старый диск data-pg-1. Данные не потеряны.
+10.  Задача (Развертывание MySQL и MongoDB через Helm):
+■     Задание: helm install mysql bitnami/mysql и helm install mongo bitnami/mongodb (которые внутри используют StatefulSet).
+■ 	Критерии: В кластере Minikube развернуты 3 разные СУБД (Postgres, MySQL, Mongo).
+
+
