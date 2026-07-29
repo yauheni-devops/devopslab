@@ -1,7 +1,7 @@
 pipeline {
     agent {
         docker {
-            image 'lachlanevenson/k8s-kubectl:v1.25.0'
+            image 'bitnami/kubectl:latest'
         }
     }
 
