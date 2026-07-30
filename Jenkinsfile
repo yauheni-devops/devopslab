@@ -2,7 +2,8 @@ pipeline {
     agent {
         docker {
             image 'lachlanevenson/k8s-kubectl:v1.25.0'
-            args 'sleep infinity'
+            args '--entrypoint=""'
+            command 'sleep infinity'
         }
     }
 
