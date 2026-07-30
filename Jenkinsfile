@@ -1,11 +1,10 @@
 pipeline {
     agent {
         docker {
-        image 'bitnami/kubectl:latest'
-        args '--entrypoint=""'
-        command '/bin/sh'
+            image 'lachlanevenson/k8s-kubectl:v1.25.0'
+            args 'sleep infinity'
+        }
     }
-}
 
     stages {
         stage('Deploy to K8s') {
