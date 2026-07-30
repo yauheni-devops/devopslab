@@ -1,11 +1,5 @@
 pipeline {
-    agent {
-        docker {
-            image 'lachlanevenson/k8s-kubectl:v1.25.0'
-            args '--entrypoint=""'
-            command 'sleep infinity'
-        }
-    }
+    agent any
 
     stages {
         stage('Deploy to K8s') {
