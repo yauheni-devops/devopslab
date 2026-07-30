@@ -1,8 +1,9 @@
 pipeline {
     agent {
-    docker {
+        docker {
         image 'bitnami/kubectl:latest'
-        args 'sleep infinity'
+        args '--entrypoint=""'
+        command '/bin/sh'
     }
 }
 
