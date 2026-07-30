@@ -6,13 +6,15 @@ pipeline {
             steps {
                 withCredentials([file(credentialsId: 'minikube-config', variable: 'KUBECONFIG')]) {
                     sh '''
-                        cat $KUBECONFIG | docker run --rm -i \
+                        docker run --rm -i \
                           --net=host \
-                          -v $PWD:/workspace \
-                          -w /workspace \
+                          -e KUBE_CONFIG="$(cat $KUBECONFIG)" \
+                          -e DEPLOY_SPEC="$(cat k8s/deployment.yml)" \
+                          --entrypoint /bin/sh \
                           lachlanevenson/k8s-kubectl:v1.25.0 \
-                          --kubeconfig=/dev/stdin \
-                          apply -f k8s/deployment.yml --insecure-skip-tls-verify=true
+                          -c 'echo "$KUBE_CONFIG" | kubectl --kubeconfig=/dev/stdin apply -f - --insecure-skip-tls-verify=true <<EOF
+$DEPLOY_SPEC
+EOF'
                     '''
                 }
             }
